@@ -142,6 +142,31 @@ bun run typecheck:all
 
 ### Environment Variables
 
+#### Proxy/Custom API Authentication
+
+You can use environment variables to authenticate with third-party API proxies or custom Anthropic API endpoints. This allows you to skip the onboarding flow entirely:
+
+```bash
+# Option 1: Using ANTHROPIC_AUTH_TOKEN (for proxy services)
+export ANTHROPIC_BASE_URL="https://your-proxy-server.com/api"
+export ANTHROPIC_AUTH_TOKEN="your-auth-token"
+
+# Option 2: Using ANTHROPIC_API_KEY (for API key-based proxies)
+export ANTHROPIC_BASE_URL="https://your-proxy-server.com/api"
+export ANTHROPIC_API_KEY="your-api-key"
+
+# Then start the app
+bun run electron:start
+```
+
+When these environment variables are set, the app will:
+1. Automatically detect the proxy configuration
+2. Create a default workspace if none exists
+3. Skip the billing/onboarding setup
+4. Use the provided credentials for all API requests
+
+#### OAuth Integrations
+
 OAuth integrations (Google, Slack, Microsoft) require credentials. Create a `.env` file:
 
 ```bash

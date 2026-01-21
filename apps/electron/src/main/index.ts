@@ -11,8 +11,10 @@ import { registerIpcHandlers } from './ipc'
 import { createApplicationMenu } from './menu'
 import { WindowManager } from './window-manager'
 import { loadWindowState, saveWindowState } from './window-state'
-import { getWorkspaces } from '@craft-agent/shared/config'
+import { getWorkspaces, saveConfig, loadStoredConfig, generateWorkspaceId, type StoredConfig } from '@craft-agent/shared/config'
 import { initializeDocs } from '@craft-agent/shared/docs'
+import { getDefaultWorkspacesDir } from '@craft-agent/shared/workspaces'
+import { hasEnvProxyConfig } from '@craft-agent/shared/credentials/backends/env'
 import { ensureDefaultPermissions } from '@craft-agent/shared/agent/permissions-config'
 import { handleDeepLink } from './deep-link'
 import log, { isDebugMode, mainLog, getLogFilePath } from './logger'
@@ -103,11 +105,50 @@ async function createInitialWindows(): Promise<void> {
 
   // Load saved window state
   const savedState = loadWindowState()
-  const workspaces = getWorkspaces()
+  let workspaces = getWorkspaces()
   const validWorkspaceIds = workspaces.map(ws => ws.id)
 
   if (workspaces.length === 0) {
-    // No workspaces configured - create window without workspace (will show onboarding)
+    // No workspaces configured - check if using environment variable authentication
+    // If so, auto-create a default workspace so user can start immediately
+    if (hasEnvProxyConfig()) {
+      mainLog.info('[init] Detected env auth without workspace, auto-creating default workspace...')
+
+      const existingConfig = loadStoredConfig()
+      const newConfig: StoredConfig = existingConfig || {
+        authType: 'api_key',
+        workspaces: [],
+        activeWorkspaceId: null,
+        activeSessionId: null,
+      }
+
+      if (newConfig.workspaces.length === 0) {
+        const workspaceId = generateWorkspaceId()
+        mainLog.info('[init] Auto-creating default workspace for env auth:', workspaceId)
+
+        const defaultWorkspace = {
+          id: workspaceId,
+          name: 'Default',
+          rootPath: `${getDefaultWorkspacesDir()}/${workspaceId}`,
+          createdAt: Date.now(),
+        }
+        newConfig.workspaces.push(defaultWorkspace)
+        newConfig.activeWorkspaceId = workspaceId
+
+        saveConfig(newConfig)
+        mainLog.info('[init] Config saved with auto-created workspace')
+
+        // Refresh workspaces after creating
+        workspaces = getWorkspaces()
+        if (workspaces.length > 0) {
+          windowManager.createWindow({ workspaceId: workspaces[0].id })
+          mainLog.info(`[init] Created window for auto-created workspace: ${workspaces[0].name}`)
+          return
+        }
+      }
+    }
+
+    // No workspaces and no env auth - create window without workspace (will show onboarding)
     windowManager.createWindow({ workspaceId: '' })
     return
   }

@@ -27,6 +27,53 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
   // Get current auth state
   ipcMain.handle(IPC_CHANNELS.ONBOARDING_GET_AUTH_STATE, async () => {
     const authState = await getAuthState()
+
+    // Auto-create default workspace when using environment variable authentication
+    // (e.g., ANTHROPIC_BASE_URL + ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN)
+    // This ensures users can start using the app immediately without going through onboarding
+    if (authState.billing.isEnvAuth && !authState.workspace.hasWorkspace) {
+      mainLog.info('[Onboarding:Main] Detected env auth without workspace, auto-creating default workspace...')
+
+      const existingConfig = loadStoredConfig()
+      const newConfig: StoredConfig = existingConfig || {
+        authType: 'api_key',
+        workspaces: [],
+        activeWorkspaceId: null,
+        activeSessionId: null,
+      }
+
+      // Only create workspace if none exist
+      if (newConfig.workspaces.length === 0) {
+        const workspaceId = generateWorkspaceId()
+        mainLog.info('[Onboarding:Main] Auto-creating default workspace for env auth:', workspaceId)
+
+        const defaultWorkspace = {
+          id: workspaceId,
+          name: 'Default',
+          rootPath: `${getDefaultWorkspacesDir()}/${workspaceId}`,
+          createdAt: Date.now(),
+        }
+        newConfig.workspaces.push(defaultWorkspace)
+        newConfig.activeWorkspaceId = workspaceId
+
+        saveConfig(newConfig)
+        mainLog.info('[Onboarding:Main] Config saved with auto-created workspace')
+
+        // Reinitialize SessionManager auth
+        try {
+          await sessionManager.reinitializeAuth()
+          mainLog.info('[Onboarding:Main] Reinitialized auth after auto-creating workspace')
+        } catch (authError) {
+          mainLog.error('[Onboarding:Main] Failed to reinitialize auth:', authError)
+        }
+
+        // Re-fetch auth state to include the new workspace
+        const updatedAuthState = await getAuthState()
+        const setupNeeds = getSetupNeeds(updatedAuthState)
+        return { authState: updatedAuthState, setupNeeds }
+      }
+    }
+
     const setupNeeds = getSetupNeeds(authState)
     return { authState, setupNeeds }
   })

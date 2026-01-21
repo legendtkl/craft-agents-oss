@@ -21,6 +21,12 @@ export interface AuthState {
     apiKey: string | null;
     /** Claude Max OAuth token (if using oauth_token auth type) */
     claudeOAuthToken: string | null;
+    /** Auth token from environment (for proxy services) */
+    authToken?: string | null;
+    /** Custom base URL for API (proxy services) */
+    baseUrl?: string | null;
+    /** Whether auth is configured via environment variables */
+    isEnvAuth?: boolean;
   };
 
   /** Workspace/MCP configuration */

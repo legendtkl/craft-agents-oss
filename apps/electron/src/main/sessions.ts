@@ -482,23 +482,50 @@ export class SessionManager {
   /**
    * Reinitialize authentication environment variables
    * Call this after onboarding or settings changes to pick up new credentials
+   *
+   * Supports:
+   * - Standard API key authentication
+   * - Claude Max OAuth token authentication
+   * - Environment variable proxy authentication (ANTHROPIC_BASE_URL + ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN)
    */
   async reinitializeAuth(): Promise<void> {
     try {
       const authState = await getAuthState()
       const { billing } = authState
 
-      sessionLog.info('Reinitializing auth with billing type:', billing.type)
+      sessionLog.info('Reinitializing auth with billing type:', billing.type, 'isEnvAuth:', billing.isEnvAuth)
+
+      // If using environment variable authentication (proxy mode), don't override env vars
+      if (billing.isEnvAuth) {
+        sessionLog.info('Using environment variable authentication (proxy mode)')
+        sessionLog.info('Base URL:', billing.baseUrl)
+
+        // The environment variables are already set, but ensure SDK picks them up
+        if (billing.authToken) {
+          // For ANTHROPIC_AUTH_TOKEN based auth, keep the env var as-is
+          sessionLog.info('Auth token is set via ANTHROPIC_AUTH_TOKEN')
+        }
+        if (billing.apiKey) {
+          // Ensure ANTHROPIC_API_KEY is set (it should be from env already)
+          sessionLog.info('API key is set via ANTHROPIC_API_KEY')
+        }
+        // ANTHROPIC_BASE_URL should already be set from environment
+        return
+      }
 
       if (billing.type === 'oauth_token' && billing.claudeOAuthToken) {
         // Use Claude Max subscription via OAuth token
         process.env.CLAUDE_CODE_OAUTH_TOKEN = billing.claudeOAuthToken
         delete process.env.ANTHROPIC_API_KEY
+        delete process.env.ANTHROPIC_AUTH_TOKEN
+        delete process.env.ANTHROPIC_BASE_URL
         sessionLog.info('Set Claude Max OAuth Token')
       } else if (billing.apiKey) {
         // Use API key (pay-as-you-go)
         process.env.ANTHROPIC_API_KEY = billing.apiKey
         delete process.env.CLAUDE_CODE_OAUTH_TOKEN
+        delete process.env.ANTHROPIC_AUTH_TOKEN
+        delete process.env.ANTHROPIC_BASE_URL
         sessionLog.info('Set Anthropic API Key')
       } else {
         sessionLog.error('No authentication configured!')

@@ -7,6 +7,8 @@
  * Supported variables (in priority order):
  *   CRAFT_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY - Anthropic API key
  *   CRAFT_CLAUDE_OAUTH_TOKEN - Claude OAuth token
+ *   ANTHROPIC_AUTH_TOKEN - Third-party proxy auth token (used with ANTHROPIC_BASE_URL)
+ *   ANTHROPIC_BASE_URL - Custom API base URL for proxy services
  *
  * Note: Workspace and agent-scoped credentials are not supported
  * via environment variables - use file backend for those.
@@ -19,7 +21,30 @@ import type { CredentialId, StoredCredential } from '../types.ts';
 const ENV_MAP: Record<string, string[]> = {
   anthropic_api_key: ['CRAFT_ANTHROPIC_API_KEY', 'ANTHROPIC_API_KEY'],
   claude_oauth: ['CRAFT_CLAUDE_OAUTH_TOKEN'],
+  // Support for third-party proxy services using auth token
+  anthropic_auth_token: ['ANTHROPIC_AUTH_TOKEN'],
 };
+
+/**
+ * Check if environment variables indicate proxy/custom API usage
+ */
+export function hasEnvProxyConfig(): boolean {
+  return !!(process.env.ANTHROPIC_BASE_URL && (process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY));
+}
+
+/**
+ * Get the configured base URL for Anthropic API
+ */
+export function getEnvBaseUrl(): string | undefined {
+  return process.env.ANTHROPIC_BASE_URL;
+}
+
+/**
+ * Get auth token from environment (for proxy services)
+ */
+export function getEnvAuthToken(): string | undefined {
+  return process.env.ANTHROPIC_AUTH_TOKEN;
+}
 
 /** Find the first env var that has a value */
 function getEnvValue(envVars: string[]): string | undefined {

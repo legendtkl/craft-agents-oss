@@ -4,11 +4,13 @@
  * Provides a single source of truth for all authentication state:
  * - Billing configuration (api_key or oauth_token)
  * - Workspace/MCP configuration
+ * - Environment variable authentication (ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_BASE_URL)
  */
 
 import { getCredentialManager } from '../credentials/index.ts';
 import { loadStoredConfig, getActiveWorkspace, type AuthType, type Workspace } from '../config/storage.ts';
 import { refreshClaudeToken, isTokenExpired, getExistingClaudeCredentials } from './claude-token.ts';
+import { hasEnvProxyConfig, getEnvBaseUrl, getEnvAuthToken } from '../credentials/backends/env.ts';
 import { debug } from '../utils/debug.ts';
 
 // ============================================
@@ -26,6 +28,12 @@ export interface AuthState {
     apiKey: string | null;
     /** Claude Max OAuth token (if using oauth_token auth type) */
     claudeOAuthToken: string | null;
+    /** Auth token from environment (for proxy services) */
+    authToken?: string | null;
+    /** Custom base URL for API (proxy services) */
+    baseUrl?: string | null;
+    /** Whether auth is configured via environment variables */
+    isEnvAuth?: boolean;
   };
 
   /** Workspace/MCP configuration */
@@ -113,15 +121,45 @@ async function getValidClaudeOAuthToken(): Promise<string | null> {
 }
 
 /**
- * Get complete authentication state from all sources (config file + credential store)
+ * Get complete authentication state from all sources (config file + credential store + env vars)
  */
 export async function getAuthState(): Promise<AuthState> {
   const config = loadStoredConfig();
   const manager = getCredentialManager();
 
+  // Check for environment variable authentication first
+  const envBaseUrl = getEnvBaseUrl();
+  const envAuthToken = getEnvAuthToken();
+  const hasEnvProxy = hasEnvProxyConfig();
+
   const apiKey = await manager.getApiKey();
   const claudeOAuth = await getValidClaudeOAuthToken();
   const activeWorkspace = getActiveWorkspace();
+
+  // If environment variables are configured for proxy, use them
+  if (hasEnvProxy) {
+    debug('[auth] Using environment variable authentication (proxy mode)');
+    debug('[auth] Base URL:', envBaseUrl);
+    debug('[auth] Has auth token:', !!envAuthToken);
+    debug('[auth] Has API key:', !!apiKey);
+
+    return {
+      billing: {
+        // Treat env auth as api_key type for compatibility
+        type: 'api_key',
+        hasCredentials: true,
+        apiKey: apiKey,
+        claudeOAuthToken: null,
+        authToken: envAuthToken,
+        baseUrl: envBaseUrl,
+        isEnvAuth: true,
+      },
+      workspace: {
+        hasWorkspace: !!activeWorkspace,
+        active: activeWorkspace,
+      },
+    };
+  }
 
   // Determine if billing credentials are satisfied based on auth type
   let hasCredentials = false;
@@ -137,6 +175,7 @@ export async function getAuthState(): Promise<AuthState> {
       hasCredentials,
       apiKey,
       claudeOAuthToken: claudeOAuth,
+      isEnvAuth: false,
     },
     workspace: {
       hasWorkspace: !!activeWorkspace,

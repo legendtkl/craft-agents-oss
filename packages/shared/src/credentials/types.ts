@@ -20,6 +20,7 @@ export type CredentialType =
   // Global credentials
   | 'anthropic_api_key'  // Anthropic API key for Claude
   | 'claude_oauth'       // Claude OAuth token (Max subscription)
+  | 'anthropic_auth_token' // Auth token for third-party proxy services
   // Source credentials (stored at ~/.craft-agent/workspaces/{ws}/sources/{slug}/)
   | 'source_oauth'       // OAuth tokens for MCP/API sources
   | 'source_bearer'      // Bearer tokens
@@ -30,6 +31,7 @@ export type CredentialType =
 const VALID_CREDENTIAL_TYPES: readonly CredentialType[] = [
   'anthropic_api_key',
   'claude_oauth',
+  'anthropic_auth_token',
   'source_oauth',
   'source_bearer',
   'source_apikey',
